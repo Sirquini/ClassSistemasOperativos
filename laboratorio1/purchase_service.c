@@ -1,14 +1,13 @@
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <sys/socket.h>
 #include <resolv.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <string.h>
 #include <syslog.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include <sqlite3.h>
 
 ////////////////////////////////////////////////////////////////////////////////
