@@ -22,7 +22,9 @@ int main(int argc, char *argv[])
       perror("ERROR abriendo socket");
       exit(1);
    }
-   server = gethostbyname(argv[0]);
+   //////server = gethostbyname(argv[0]);
+    in_addr_t ip = inet_addr(argv[1]);//ipaddress);
+    server = gethostbyaddr (&ip, sizeof(ip), AF_INET);
    //server = gethostbyname(argv[0]);  //localhost
    if (server == NULL) {
       fprintf(stderr,"ERROR, no se encontro el host\n");
