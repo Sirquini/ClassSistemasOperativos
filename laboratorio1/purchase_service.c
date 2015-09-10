@@ -95,7 +95,6 @@ void validator_service(void)
     while(1){
         sqlite3 *conn;
         sqlite3_stmt    *res;
-        sqlite3 *conn2;
         sqlite3_stmt    *res2;
         int error = 0;
         int error2 = 0;
@@ -121,16 +120,30 @@ void validator_service(void)
         // }
         
         // puts("==========================");
-        
         while (sqlite3_step(res) == SQLITE_ROW) 
         {
-            error = sqlite3_prepare_v2(conn2,
-                                   "select card_number,amount from requests where status = 0",
-                                   1000, &res2, &tail);
-            printf("%s|", sqlite3_column_text(res, 0));
-            printf("%s|", sqlite3_column_text(res, 1));
-            printf("%s|", sqlite3_column_text(res, 2));
-            printf("%u\n", sqlite3_column_int(res, 3));
+            char *query="";
+            asprintf (&query, "select cupo,correo from cards where card_number=%s",sqlite3_column_text(res, 0));
+            error2=sqlite3_prepare_v2(conn,query,1000,&res2,&tail);
+            if (error2 != SQLITE_OK) 
+            {
+                printf("the card number %s not exits!\n", sqlite3_column_text(res,0));
+                continue;
+            }
+            int error3 = 0;
+            if (sqlite3_column_int(res, 1)<sqlite3_column_int(res2, 0))
+            {
+                char *query2="";
+                asprintf (&query, "update cards set cupo=%d where card_number=%s",sqlite3_column_int(res, 1)-sqlite3_column_int(res2, 0),sqlite3_column_text(res, 0));
+                error3 = sqlite3_exec(conn,query2,0, 0, 0);
+            }
+            else{
+                   
+            }
+            // printf("%s|", sqlite3_column_text(res, 0));
+            // printf("%s|", sqlite3_column_text(res, 1));
+            // printf("%s|", sqlite3_column_text(res, 2));
+            // printf("%u\n", sqlite3_column_int(res, 3));
             rec_count++;
         }
         
