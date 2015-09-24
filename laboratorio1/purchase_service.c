@@ -87,10 +87,35 @@ int insert_request(int customer_id,
 ////////////////////////////////////////////////////////////////////////////////
 // Validator Service
 ////////////////////////////////////////////////////////////////////////////////
-void validator_service(void)
+void validator_service( const char *dir)
 {
     setlogmask (LOG_UPTO (LOG_INFO | LOG_ERR));
     syslog (LOG_INFO, "Starting Validator Service... pid:[%d]", getpid());
+
+    //Send to email service
+    int clientSocket;
+    char buffer[1024];
+    struct sockaddr_in serverAddr;
+    socklen_t addr_size;
+
+    /*---- Create the socket. The three arguments are: ----*/
+    /* 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) */
+    clientSocket = socket(PF_INET, SOCK_STREAM, 0);
+
+    /*---- Configure settings of the server address struct ----*/
+    /* Address family = Internet */
+    serverAddr.sin_family = AF_INET;
+    /* Set port number, using htons function to use proper byte order */
+    serverAddr.sin_port = htons(5050);
+    /* Set IP address to localhost */
+    serverAddr.sin_addr.s_addr = inet_addr(dir);
+    //////serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    /* Set all bits of the padding field to 0 */
+    memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);  
+
+    /*---- Connect the socket to the server using the address struct ----*/
+    addr_size = sizeof serverAddr;
+    ////////////////////////////////
 
     while(1){
         sqlite3 *conn;
@@ -101,7 +126,6 @@ void validator_service(void)
         int rec_count = 0;
         const char *errMSG;
         const char *tail;
-
         error = sqlite3_open("purchase_service.db", &conn);
         if (error) 
         {
@@ -134,11 +158,16 @@ void validator_service(void)
             if (sqlite3_column_int(res, 1)<sqlite3_column_int(res2, 0))
             {
                 char *query2="";
-                asprintf (&query, "update cards set cupo=%d where card_number=%s",sqlite3_column_int(res, 1)-sqlite3_column_int(res2, 0),sqlite3_column_text(res, 0));
+                asprintf (&query, "update cards set cupo=%d where card_number=%s",sqlite3_column_int(res2, 0)-sqlite3_column_int(res, 1),sqlite3_column_text(res, 0));
                 error3 = sqlite3_exec(conn,query2,0, 0, 0);
+                char *message="";
+                asprintf (&message, "Compra exitosa!, su nuevo saldo es %d|%s",sqlite3_column_int(res2, 0)-sqlite3_column_int(res, 1),sqlite3_column_text(res2, 1));
+                send(clientSocket, buffer,strlen(buffer),0);
             }
             else{
-                   
+                char *message="";
+                asprintf (&message, "Fallo en la compra!, no tienes saldo suficiente, saldo %d|%s",sqlite3_column_int(res2, 0),sqlite3_column_text(res2, 1));
+                send(clientSocket, buffer,strlen(buffer),0);  
             }
             // printf("%s|", sqlite3_column_text(res, 0));
             // printf("%s|", sqlite3_column_text(res, 1));
@@ -151,6 +180,7 @@ void validator_service(void)
         // printf("We received %d records.\n", rec_count);
         
         sqlite3_close(conn);
+        sleep(1);
     }
 
     syslog (LOG_INFO, "[Validator Service]: Started...");
@@ -269,15 +299,20 @@ void listener_service(void)
 ////////////////////////////////////////////////////////////////////////////////
 // Main function (Service)
 ////////////////////////////////////////////////////////////////////////////////
-int main(int Count, char *Strings[])
+//int main(int Count, char *Strings[])
+int main(int argc, char const *argv[])
 {
+    if(argv[1]==""){
+        printf("Error, ingrese direccion\n");
+        exit(1);
+    }
     enum codes code = OK;
     setlogmask (LOG_UPTO (LOG_INFO | LOG_ERR));
 
     if (fork() == 0) 
     {
         //Child
-        validator_service();
+        validator_service(argv[1]);
     }
     else 
     {

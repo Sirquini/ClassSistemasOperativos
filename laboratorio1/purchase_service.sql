@@ -13,3 +13,5 @@ create table cards(
 				cupo integer not null,
 				correo varchar(40) not null
 );
+
+insert into cards card_number,cupo,correo values('9876789545A',1000000,'arevaloarboled@hotmail.com');
