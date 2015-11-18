@@ -36,6 +36,15 @@ static inline char *get_response_code(enum codes code)
     return strings[code];
 }
 
+static int callback(void *NotUsed, int argc, char **argv, char **azColName){
+   int i;
+   for(i=0; i<argc; i++){
+      printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+   }
+   printf("\n");
+   return 0;
+}
+
 int insert_request(int customer_id, 
                    char *transaction_id,
                    char *card_number, 
@@ -93,10 +102,10 @@ void validator_service( const char *dir)
     syslog (LOG_INFO, "Starting Validator Service... pid:[%d]", getpid());
 
     //Send to email service
-    int clientSocket;
-    char buffer[1024];
-    struct sockaddr_in serverAddr;
-    socklen_t addr_size;
+    // //int clientSocket;
+    // //char buffer[1024];
+    // //struct sockaddr_in serverAddr;
+    // //socklen_t addr_size;
 
     /*---- Create the socket. The three arguments are: ----*/
     /* 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) */
@@ -115,7 +124,7 @@ void validator_service( const char *dir)
 
     /*---- Connect the socket to the server using the address struct ----*/
     addr_size = sizeof serverAddr;
-    ////////////////////////////////
+    //////////////////////////////// 
 
     while(1){
         sqlite3 *conn;
@@ -124,7 +133,8 @@ void validator_service( const char *dir)
         int error = 0;
         int error2 = 0;
         int rec_count = 0;
-        const char *errMSG;
+        ////const char *errMSG=0;
+        char *errMSG=0;
         const char *tail;
         error = sqlite3_open("purchase_service.db", &conn);
         if (error) 
@@ -134,7 +144,7 @@ void validator_service( const char *dir)
         }
 
         error = sqlite3_prepare_v2(conn,
-                                   "select card_number,amount from requests where status = 0",
+                                   "select id,card_number,amount from requests where status = 0",
                                    1000, &res, &tail);
         
         // if (error != SQLITE_OK) 
@@ -146,28 +156,66 @@ void validator_service( const char *dir)
         // puts("==========================");
         while (sqlite3_step(res) == SQLITE_ROW) 
         {
+            int clientSocket;
+            char buffer[1024];
+            struct sockaddr_in serverAddr;
+            socklen_t addr_size;
+
             char *query="";
-            asprintf (&query, "select cupo,correo from cards where card_number=%s",sqlite3_column_text(res, 0));
+            asprintf (&query, "select cupo,correo from cards where card_number=\"%s\"",sqlite3_column_text(res, 1));
             error2=sqlite3_prepare_v2(conn,query,1000,&res2,&tail);
+            sqlite3_step(res2);
+            int error3 = 0;
+
             if (error2 != SQLITE_OK) 
             {
                 printf("the card number %s not exits!\n", sqlite3_column_text(res,0));
-                continue;
-            }
-            int error3 = 0;
-            if (sqlite3_column_int(res, 1)<sqlite3_column_int(res2, 0))
-            {
                 char *query2="";
-                asprintf (&query, "update cards set cupo=%d where card_number=%s",sqlite3_column_int(res2, 0)-sqlite3_column_int(res, 1),sqlite3_column_text(res, 0));
-                error3 = sqlite3_exec(conn,query2,0, 0, 0);
-                char *message="";
-                asprintf (&message, "Compra exitosa!, su nuevo saldo es %d|%s",sqlite3_column_int(res2, 0)-sqlite3_column_int(res, 1),sqlite3_column_text(res2, 1));
-                send(clientSocket, buffer,strlen(buffer),0);
-            }
-            else{
-                char *message="";
-                asprintf (&message, "Fallo en la compra!, no tienes saldo suficiente, saldo %d|%s",sqlite3_column_int(res2, 0),sqlite3_column_text(res2, 1));
-                send(clientSocket, buffer,strlen(buffer),0);  
+                asprintf (&query2, "delete from requests where card_number=\"%s\"",sqlite3_column_text(res, 1));
+                error3 = sqlite3_exec(conn,query2,callback, 0, &errMSG);
+                // if (error3!=SQLITE_OK)
+                // {
+                //     printf("ERROR D: %s\n", errMSG);
+                // }
+                // continue;
+            }else{ 
+                if (sqlite3_column_int(res2, 0)>sqlite3_column_int(res, 2))
+                {
+                    char *query2="";
+                    asprintf (&query2, "update cards set cupo=%d where card_number=\"%s\"",sqlite3_column_int(res2, 0)-sqlite3_column_int(res, 2),sqlite3_column_text(res, 1));
+                    error3 = sqlite3_exec(conn,query2,callback, 0, &errMSG);
+                    char *message="";
+                    asprintf (&message, "Compra exitosa!, su nuevo saldo es %d|%s",sqlite3_column_int(res2, 0)-sqlite3_column_int(res, 2),sqlite3_column_text(res2, 1));
+                    printf("%s\n", message);
+                    if(connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size)<0){
+                        printf("Error con la conexion al servidor, intente de nuevo\n");
+                        exit(1);
+                    }
+                    else{
+                    send(clientSocket, message,strlen(message),0);}
+                }
+                else{
+                    char *message="";
+                    asprintf (&message, "Fallo en la compra!, no tienes saldo suficiente, saldo %d|%s",sqlite3_column_int(res2, 0),sqlite3_column_text(res2, 1));
+                    printf("%s\n", message);
+                    if(connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size)<0){
+                        printf("Error con la conexion al servidor, intente de nuevo\n");
+                        exit(1);
+                    }
+                    else{
+                        send(clientSocket, message,strlen(message),0);  
+                    }
+                }
+                char *query2="";
+                asprintf (&query2, "update requests set status=%d where id=%d",1,sqlite3_column_int(res, 0));
+                error3 = sqlite3_exec(conn,query2,callback, 0, &errMSG); 
+                // printf("%d\n",sqlite3_column_int(res, 2) );   
+                // if (error3!=SQLITE_OK)
+                // {
+                //     printf("ERROR: %s\n",errMSG );
+                // }
+                //close(clientSocket);
+                sleep(10);
             }
             // printf("%s|", sqlite3_column_text(res, 0));
             // printf("%s|", sqlite3_column_text(res, 1));

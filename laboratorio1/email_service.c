@@ -1,10 +1,15 @@
-#include <stdio.h>
+#include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <string.h>
+#include <unistd.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <resolv.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <string.h>
+#include <syslog.h>
 #define MAXBUF    1024
-#define MY_PORT   4040
+#define MY_PORT   5050
 //WE USED POSTFIX IN LINUX TO SEND EMAILS
 
 int main(int argc, char const *argv[])
@@ -46,21 +51,21 @@ int main(int argc, char const *argv[])
     syslog (LOG_INFO, "[Email Service]: Started...");
 
 
-    printf("Waiting connection ... \n");
-    int clientfd;
-    struct sockaddr_in client_addr;
-    int addrlen=sizeof(client_addr);
-
-    // accept a connection (creating a data pipe)
-    clientfd = accept(sockfd, (struct sockaddr*)&client_addr, &addrlen);
-    syslog (LOG_INFO, 
-            "[Email Service]: Socket %s:%d connected\n", 
-                                        inet_ntoa(client_addr.sin_addr), 
-                                        ntohs(client_addr.sin_port));
+    
     //Forever
     while (1)
     {  
+        printf("Waiting connection ... \n");
+        int clientfd;
+        struct sockaddr_in client_addr;
+        int addrlen=sizeof(client_addr);
 
+        // accept a connection (creating a data pipe)
+        clientfd = accept(sockfd, (struct sockaddr*)&client_addr, &addrlen);
+        syslog (LOG_INFO, 
+                "[Email Service]: Socket %s:%d connected\n", 
+                                            inet_ntoa(client_addr.sin_addr), 
+                                            ntohs(client_addr.sin_port));
         recv(clientfd, buffer, MAXBUF, 0);
         syslog (LOG_INFO, "[Email Service]: Data receive [%s]\n", buffer);
         printf("message recibe: %s by %s \n",buffer, inet_ntoa(client_addr.sin_addr));
@@ -84,9 +89,9 @@ int main(int argc, char const *argv[])
     	char *command="";
         asprintf (&command, "echo \"%s\" | mail -s \"detalles compra\" %s",data[0],data[1]);
     	system(command);
-    	syslog (LOG_INFO, "[Email Service]: Email [%s] Message\n", data[1],data[0]);
+    	syslog (LOG_INFO, "[Email Service]: Email [%s] Message\n", data[1]);//,data[0]);
         //Close data connection
-        
+        close(clientfd);
     }
 
     // Clean up (should never get here!)
